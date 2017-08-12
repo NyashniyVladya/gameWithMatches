@@ -79,7 +79,7 @@ init python:
             Создаёт случайное верное равенство.
             """
             string = str(self.randint(1, 99))
-            for i in xrange(self.randint(1, 3)):
+            for i in xrange(self.randint(1, (3 if self.hard_mode else 2))):
                 string += self.choice("+-*")
                 string += str(self.randint(-99, 99))
             for shabl, repl in self.symb_replace_mapping.iteritems():
@@ -256,7 +256,7 @@ init python:
                 0, 0, 0, 0
             ).get_size()[0]
             width = square_size * self.base_offset * (self.tokens_len + 1)
-            height = square_size * 3
+            height = square_size * 2
             xzoom = float(config.screen_width) / width
             yzoom = float(config.screen_height) / height
             return min(xzoom, yzoom)
@@ -372,6 +372,8 @@ init python:
                         if eval(result):
                             is_right = True
                     except SyntaxError:
+                        pass
+                    except ZeroDivisionError:
                         pass
             return (result, is_right)
 
