@@ -3,6 +3,14 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+#RenPy byte-compiled.
+*.rpyc
+*.rpyb
+*.save
+persistent
+tmp/
+log*
+
 # C extensions
 *.so
 
