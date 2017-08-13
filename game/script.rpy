@@ -115,16 +115,14 @@ init python:
                         parts.append(i)
 
             num_array = self.transform_num_array(num_array)
-            num_array = list(num_array)
             if self.hard_mode:
-                self.shuffle(num_array)
-            while num_array[0] == '0':
-                self.shuffle(num_array)
-            num_array = "".join(num_array)
+                num_array = self.shuffle_string(num_array)
             final_expr = ""
             for part in parts:
                 if part.isdigit():
                     crop = len(part)
+                    while num_array.startswith('0') and (len(num_array) > 1):
+                        num_array = self.shuffle_string(num_array)
                     final_expr += num_array[:crop]
                     num_array = num_array[crop:]
                 else:
@@ -132,6 +130,11 @@ init python:
             if eval(final_expr.replace('=', "==")):
                 return self.generate_false_expression()
             return (expr, final_expr, self.calculate_steps(expr, final_expr))
+
+        def shuffle_string(self, string):
+            str_data = list(string)
+            self.shuffle(str_data)
+            return "".join(str_data)
 
         def transform_num_array(self, expr):
             u"""
