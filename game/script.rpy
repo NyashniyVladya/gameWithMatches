@@ -20,23 +20,79 @@ init python:
             self.hard_mode = hard
             (
                 self.true_expr,
-                self.false_expr,
-                self.steps
+                self.false_expr
             ) = (
                 self.generate_false_expression()
             )
             self.disp = MatchGameTable(self.false_expr)
+            self.steps = self.calculate_steps()
             self.update_status()
 
         def start_cycle(self):
             self.disp.show()
             self.disp.return_pos_all_children()
+            renpy.show(
+                "helpButton",
+                what=renpy.display.behavior.TextButton(
+                    u"Сделать правильный ход",
+                    clicked=Function(self.auto_step),
+                    align=(.99, .01)
+                )
+            )
             while True:
-                self.disp.drop_action(ui.interact())
+                self.disp.drop_action_choice(ui.interact())
                 self.steps -= 1
                 self.update_status()
                 if self.is_solved or (self.steps <= 0):
                     return self.is_solved
+
+        def get_not_right_elements(self):
+            u"""
+            Возвращает элементы, которые находятся не на своих местах.
+            """
+            assert (len(self.expression_now) == len(self.true_expr))
+            _tokens = MatchGameTable.token_mapping
+            _step_counter = 0
+
+            _not_right_drops = {
+                '0': [],
+                '1': []
+            }
+            for order_num, exprs in enumerate(
+                zip(self.disp.get_bit_masks(), self.true_expr)
+            ):
+                current_mask, true_token = exprs
+                true_mask = bin(_tokens[true_token])[2:]
+                while len(true_mask) < len(current_mask):
+                    true_mask = '0' + true_mask
+                for current_bit, true_bit, element_name in zip(
+                    current_mask,
+                    true_mask,
+                    MatchGameTable.elements_names
+                ):
+                    if current_bit != true_bit:
+                        _not_right_drops[current_bit].append(
+                            self.disp.get_drag_for_name_and_order(
+                                order_num,
+                                element_name
+                            )
+                        )
+            return _not_right_drops
+
+        def auto_step(self):
+            u"""
+            Делает правильный ход, приближающий к решению.
+            """
+            if self.disp._move_lock.locked():
+                return
+            elements = self.get_not_right_elements()
+            try:
+                drag = self.choice(elements['1'])
+                drop = self.choice(elements['0'])
+            except IndexError:
+                return
+            self.disp.drop_action(drag, drop)
+            renpy.end_interaction("skip")
 
         def update_status(self):
             self.expression_now, self.is_solved = self.disp.current_value()
@@ -61,25 +117,20 @@ init python:
                 )
             )
 
-        def calculate_steps(self, first_expr, second_expr):
+        def calculate_steps(self):
             u"""
-            Принимает два выражения, возвращает количество "шагов", 
-            для трансформации одного в другое.
+            Возвращает минимальное количество шагов, необходимое, 
+            для разрешения текущей ситуации.
             """
-            assert (len(first_expr) == len(second_expr))
-            _tokens = MatchGameTable.token_mapping
-            _step_counter = 0
-            for tok1, tok2 in zip(first_expr, second_expr):
-                xor_result = _tokens[tok1] ^ _tokens[tok2]
-                _step_counter += bin(xor_result).count('1')
-            return _step_counter
+            return len(self.get_not_right_elements()['1'])
 
         def generate_true_expression(self):
             u"""
             Создаёт случайное верное равенство.
             """
             string = str(self.randint(1, 99))
-            for i in xrange(self.randint(1, (3 if self.hard_mode else 2))):
+            max_val = (self.randint(2, 4) if self.hard_mode else 1)
+            for i in xrange(max_val):
                 string += self.choice("+-*")
                 string += str(self.randint(-99, 99))
             for shabl, repl in self.symb_replace_mapping.iteritems():
@@ -95,8 +146,7 @@ init python:
             Возвращате массив формата:
             (
                 Верное равенство,
-                Неверное произведённое из верного,
-                Количество "шагов".
+                Неверное, произведённое из верного
             )
             """
             expr = self.generate_true_expression()
@@ -129,7 +179,7 @@ init python:
                     final_expr += part
             if eval(final_expr.replace('=', "==")):
                 return self.generate_false_expression()
-            return (expr, final_expr, self.calculate_steps(expr, final_expr))
+            return (expr, final_expr)
 
         def shuffle_string(self, string):
             str_data = list(string)
@@ -274,37 +324,47 @@ init python:
             ui.remove(self)
             ui.close()
 
-        def drop_action(self, drags_list):
+        def drop_action_choice(self, drags_list):
             u"""
             Определяет оптимальный дроп и "сбрасывает" туда объект.
             Если вариантов несколько - спрашивает.
 
             Вызывать извне интеракта.
             """
+            if drags_list == "skip":
+                return
             with self._move_lock:
                 drops = tuple(self.__get_best_drops(drags_list))
                 if len(drops) == 1:
                     drop = drops[0][-1]
                 else:
                     drop = renpy.display_menu(drops)
-                for drag in drags_list:
-                    (
-                        drag.drag_name,
-                        drop.drag_name,
-                        drag.order_num,
-                        drop.order_num,
-                    ) = (
-                        drop.drag_name,
-                        drag.drag_name,
-                        drop.order_num,
-                        drag.order_num
-                    )
-                    drag.update_setting_from_name()
-                    drop.update_setting_from_name()
+            self.drop_action(drags_list, drop)
 
-                drop.move_to_drag_coors(0)
-                for drag in drags_list:
-                    drag.move_to_drag_coors()
+        def drop_action(self, drags_list, drop):
+            u"""
+            Меняет местами положения объектов.
+            """
+            if not hasattr(drags_list, "__iter__"):
+                drags_list = [drags_list]
+            for drag in drags_list:
+                (
+                    drag.drag_name,
+                    drop.drag_name,
+                    drag.order_num,
+                    drop.order_num,
+                ) = (
+                    drop.drag_name,
+                    drag.drag_name,
+                    drop.order_num,
+                    drag.order_num
+                )
+                drag.update_setting_from_name()
+                drop.update_setting_from_name()
+
+            drop.move_to_drag_coors(0)
+            for drag in drags_list:
+                drag.move_to_drag_coors()
 
         def __get_best_drops(self, drags_list):
             u"""
@@ -346,6 +406,12 @@ init python:
             second_value = self.elements_names.index(drag.drag_name)
             return base_value + second_value
 
+        def get_drag_for_name_and_order(self, order, name):
+            for drag in self.get_children():
+                if (drag.order_num == order) and (drag.drag_name == name):
+                    return drag
+            raise Exception(u"Элемент {0}{1} не найден.".format(order, name))
+
         def current_value(self):
             u"""
             Вычисляет текущее выражение, на основе положений элементов.
@@ -353,18 +419,12 @@ init python:
             Возвращает кортеж, где первый элемент - строка выражения,
             а второй - булевое, определяющее, решено ли оно.
             """
-            temp_val = ""
             result = ""
-            for ind, drag in enumerate(
-                sorted(self.get_children(), key=self.__sorted_algorithm)
-            ):
-                ind += 1
-                temp_val += str(int(drag.draggable))
-                if (ind % self.segment_len) == 0:
-                    temp_val = int(temp_val, 2)
-                    preresult = self.reverced_mapping.get(temp_val, '?')
-                    result += self.replace_mapping.get(preresult, preresult)
-                    temp_val = ""
+            for binary_key in self.get_bit_masks():
+                decimal_key = int(binary_key, 2)
+                preresult = self.reverced_mapping.get(decimal_key, '?')
+                result += self.replace_mapping.get(preresult, preresult)
+
             if isinstance(result, str):
                 result = result.encode("utf-8", "ignore")
             result = result.strip()
@@ -379,6 +439,21 @@ init python:
                     except ZeroDivisionError:
                         pass
             return (result, is_right)
+
+        def get_bit_masks(self):
+            u"""
+            Генератор.
+            Возвращает бинарное состояние каждого элемента.
+            """
+            temp_val = ""
+            for ind, drag in enumerate(
+                sorted(self.get_children(), key=self.__sorted_algorithm)
+            ):
+                ind += 1
+                temp_val += str(int(drag.draggable))
+                if not (ind % self.segment_len):
+                    yield temp_val
+                    temp_val = ""
 
         def return_pos_all_children(self):
             u"""
@@ -434,7 +509,7 @@ init python:
                 "d": Transform(
                     match_pic,
                     rotate=set_rotate,
-                    alpha=(1. if draggable else .05),
+                    alpha=(1. if draggable else .0),
                     zoom=zoom
                 ),
                 "draggable": draggable,
