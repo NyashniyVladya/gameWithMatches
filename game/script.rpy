@@ -5,6 +5,16 @@ init python:
     from threading import Lock
     from random import Random
 
+    class ReloadException(Exception):
+        u"""
+        Обёртка, для обработки перезагрузки.
+        """
+
+    class ExitException(Exception):
+        u"""
+        Обёртка, для обработки выхода.
+        """
+
     class LogicControl(Random):
 
         symb_replace_mapping = {
@@ -25,23 +35,32 @@ init python:
                 self.generate_false_expression()
             )
             self.disp = MatchGameTable(self.false_expr)
-            self.steps = self.calculate_steps()
+            self.steps = self.calculate_steps() * 2
             self.update_status()
 
         def start_cycle(self):
             self.disp.show()
             self.disp.return_pos_all_children()
             renpy.show(
-                "helpButton",
-                what=renpy.display.behavior.TextButton(
-                    u"Сделать правильный ход",
-                    clicked=Function(self.auto_step),
+                "matchGameButtonsBox",
+                what=VBox(
+                    renpy.display.behavior.TextButton(
+                        u"Выход",
+                        clicked=Function(renpy.end_interaction, "exit"),
+                    ),
+                    renpy.display.behavior.TextButton(
+                        u"Другое задание",
+                        clicked=Function(renpy.end_interaction, "reload"),
+                    ),
+                    renpy.display.behavior.TextButton(
+                        u"Сделать правильный ход",
+                        clicked=Function(self.auto_step),
+                    ),
                     align=(.99, .01)
                 )
             )
             while True:
-                self.disp.drop_action_choice(ui.interact())
-                self.steps -= 1
+                self.steps -= self.disp.interact_handler()
                 self.update_status()
                 if self.is_solved or (self.steps <= 0):
                     return self.is_solved
@@ -83,6 +102,8 @@ init python:
             u"""
             Делает правильный ход, приближающий к решению.
             """
+            if self.steps < 3:
+                return
             if self.disp._move_lock.locked():
                 return
             elements = self.get_not_right_elements()
@@ -324,22 +345,25 @@ init python:
             ui.remove(self)
             ui.close()
 
-        def drop_action_choice(self, drags_list):
+        def interact_handler(self):
             u"""
-            Определяет оптимальный дроп и "сбрасывает" туда объект.
-            Если вариантов несколько - спрашивает.
-
-            Вызывать извне интеракта.
+            Обработчик значений, возвращаемых в результате интеракта.
             """
-            if drags_list == "skip":
-                return
+            ui_return_val = ui.interact()
+            if ui_return_val == "skip":
+                return 3
+            if ui_return_val == "reload":
+                raise ReloadException()
+            if ui_return_val == "exit":
+                raise ExitException()
             with self._move_lock:
-                drops = tuple(self.__get_best_drops(drags_list))
+                drops = tuple(self.__get_best_drops(ui_return_val))
                 if len(drops) == 1:
                     drop = drops[0][-1]
                 else:
                     drop = renpy.display_menu(drops)
-            self.drop_action(drags_list, drop)
+            self.drop_action(ui_return_val, drop)
+            return 1
 
         def drop_action(self, drags_list, drop):
             u"""
@@ -586,18 +610,30 @@ init python:
         def rndInt(self, val):
             return int(round(float(val)))
 
+
 label start:
-    menu:
-        "Юзаем хардмод?"
-        "Да!":
-            $ _val = True
-        "Не, не, не. И так всё нормально.":
-            $ _val = False
+    "Правила таковы. Количество ходов, которые можно сделать, равно минимуму ходов, для правильного решения, помноженному на 2."
+    "Ваш обычный ход отнимает один ход. Так же Вы можете воспользоваться подсказкой - компьютер сдеалет за Вас гарантированно верный ход. Это отнимает три хода."
+    "Используйте её умело, т.к. может случиться, что зная решение у Вас не останется ходов."
     python:
-        gameLogic = LogicControl(_val)
-        result = gameLogic.start_cycle()
-    if result:
-        "Молодец!"
-    else:
-        "Не молодец."
+        while True:
+            renpy.scene()
+            gameLogic = LogicControl(
+                renpy.display_menu(
+                    (
+                        (u"Юзаем хардмод", True),
+                        (u"Не, не, не. И так всё нормально.", False),
+                    )
+                )
+            )
+            try:
+                result = gameLogic.start_cycle()
+            except ReloadException:
+                continue
+            except ExitException:
+                break
+            if result:
+                renpy.say(None, u"Молодец!")
+            else:
+                renpy.say(None, u"Не молодец!")
     return
