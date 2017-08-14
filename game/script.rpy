@@ -34,7 +34,7 @@ init python:
             ) = (
                 self.generate_false_expression()
             )
-            self.disp = MatchGameTable(self.false_expr)
+            self.disp = MatchGameTable(self.false_expr, "match.png")
             self.steps = self.calculate_steps() * 2
             self.update_status()
 
@@ -300,26 +300,26 @@ init python:
         elements_names = "abcdefghijkl"
         segment_len = len(elements_names)
 
-        def __init__(self, expression, match_pic="match.png"):
+        def __init__(self, expression, *match_pics):
 
             super(MatchGameTable, self).__init__()
             self.tokens_len = len(expression)
-            self.base_offset = 1.3
+            self.base_offset = 1.5
             self._move_lock = Lock()
             self.self_layer = "master"
-            _zoom = self.calculate_zoom(match_pic)
             for ind, token in enumerate(str(expression)):
                 for name, draggable in zip(
                     self.elements_names,
                     self._get_mapping_from_int(token)
                 ):
+                    pic = renpy.random.choice(match_pics)
                     self.add(
                         MatchObject(
-                            match_pic=match_pic,
+                            match_pic=pic,
                             draggable=draggable,
                             drag_name=name,
                             order_num=ind,
-                            zoom=_zoom,
+                            zoom=self.calculate_zoom(pic),
                             base_offset=self.base_offset
                         )
                     )
