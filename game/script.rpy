@@ -324,6 +324,9 @@ init python:
                         )
                     )
 
+        def visit(self):
+            return self.children
+
         def calculate_zoom(self, pic):
             square_size = renpy.render(
                 Transform(pic, rotate=45),
@@ -563,6 +566,9 @@ init python:
                     self.set_child(Transform(self.child.child, **param))
                     self.corner = corner_name
                     return
+
+        def visit(self):
+            return [self.child]
 
         def return_dragged(self, drags_list, drop):
 
