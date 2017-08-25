@@ -5,7 +5,8 @@ init python:
     from random import Random
     from __builtin__ import (
         map as fixedMap,
-        min as fixMin
+        min as fixMin,
+        all as fixAll
     )
 
     class ReloadException(Exception):
@@ -18,7 +19,7 @@ init python:
         Обёртка, для обработки выхода.
         """
 
-    class LogicControl(Random):
+    class LogicControl(Random, NoRollback):
 
         symb_replace_mapping = {
             "+-": '-',
@@ -42,7 +43,7 @@ init python:
             self.update_status()
 
         def start_cycle(self):
-            self.disp.show()
+            renpy.show("matchGameDisp", what=self.disp)
             self.disp.return_pos_all_children()
             renpy.show(
                 "matchGameButtonsBox",
@@ -67,6 +68,10 @@ init python:
                 self.update_status()
                 if self.is_solved or (self.steps <= 0):
                     return self.is_solved
+
+        def hide(self):
+            for i in ("ButtonsBox", "Disp", "StatusText"):
+                renpy.hide("matchGame{0}".format(i))
 
         def get_not_right_elements(self):
             u"""
@@ -271,7 +276,7 @@ init python:
                         return (tok, (corrector * -1))
                 corrector += self.choice((1, -1))
 
-    class MatchGameTable(DragGroup):
+    class MatchGameTable(DragGroup, NoRollback):
         token_mapping = {
             '0': 0b111111000000,
             '1': 0b11000000000,
@@ -340,16 +345,6 @@ init python:
             xzoom = float(config.screen_width) / width
             yzoom = float(config.screen_height) / height
             return fixMin(xzoom, yzoom)
-
-        def show(self):
-            ui.layer(self.self_layer)
-            ui.add(self)
-            ui.close()
-
-        def hide(self):
-            ui.layer(self.self_layer)
-            ui.remove(self)
-            ui.close()
 
         def interact_handler(self):
             u"""
@@ -492,7 +487,7 @@ init python:
             for i in self.get_children():
                 i.move_to_drag_coors()
 
-    class MatchObject(Drag):
+    class MatchObject(Drag, NoRollback):
 
         u"""
         Объект спички.
@@ -619,30 +614,52 @@ init python:
         def rndInt(self, val):
             return int(round(float(val)))
 
+    def startMatchGame(roundCount=3):
+        u"""
+        Запускает игру из трёх раундов.
+        Возвращает генератор, итерировать результат, через all.
+        """
+        for i in xrange(roundCount):
+            i += 1
+            try:
+                try_counter = 0
+                while True:
+                    try_counter += 1
+                    renpy.say(
+                        None,
+                        u"{0} раунд. Попытка №{1}".format(i, try_counter)
+                    )
+                    gameLogic = LogicControl(
+                        renpy.display_menu(
+                            (
+                                (u"Юзаем хардмод", True),
+                                (u"Не, не, не. И так всё нормально.", False),
+                            )
+                        )
+                    )
+                    try:
+                        result = gameLogic.start_cycle()
+                    except ReloadException:
+                        continue
+                    if result:
+                        yield result
+                        break
+                    raise ExitException()
+            except ExitException:
+                yield False
+                break
+            finally:
+                try:
+                    gameLogic.hide()
+                except:
+                    pass
 
 label start:
     "Правила таковы: Количество ходов, которые можно сделать, равно минимуму ходов, для правильного решения, помноженному на 2."
     "Ваш обычный ход отнимает один ход. Так же Вы можете воспользоваться подсказкой - компьютер сделает за Вас гарантированно верный ход. Это отнимает три хода."
     "Используйте её умело, т.к. может случиться, что, зная решение, у Вас не останется ходов."
-    python:
-        while True:
-            renpy.scene()
-            gameLogic = LogicControl(
-                renpy.display_menu(
-                    (
-                        (u"Юзаем хардмод", True),
-                        (u"Не, не, не. И так всё нормально.", False),
-                    )
-                )
-            )
-            try:
-                result = gameLogic.start_cycle()
-            except ReloadException:
-                continue
-            except ExitException:
-                break
-            if result:
-                renpy.say(None, u"Молодец!")
-            else:
-                renpy.say(None, u"Не молодец!")
+    if fixAll(startMatchGame()):
+        "Молодец."
+    else:
+        "Не молодец."
     return
