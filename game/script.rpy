@@ -1,9 +1,12 @@
 ﻿
 init python:
 
-    from __builtin__ import map as fixedMap
     from threading import Lock
     from random import Random
+    from __builtin__ import (
+        map as fixedMap,
+        mix as fixMin
+    )
 
     class ReloadException(Exception):
         u"""
@@ -336,7 +339,7 @@ init python:
             height = square_size * 2
             xzoom = float(config.screen_width) / width
             yzoom = float(config.screen_height) / height
-            return min(xzoom, yzoom)
+            return fixMin(xzoom, yzoom)
 
         def show(self):
             ui.layer(self.self_layer)
