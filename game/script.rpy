@@ -5,7 +5,7 @@ init python:
     from random import Random
     from __builtin__ import (
         map as fixedMap,
-        mix as fixMin
+        min as fixMin
     )
 
     class ReloadException(Exception):
